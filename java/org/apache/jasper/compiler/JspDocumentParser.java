@@ -17,6 +17,7 @@
 package org.apache.jasper.compiler;
 
 import java.io.CharArrayWriter;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -214,6 +215,99 @@ class JspDocumentParser
 
         return pageNodes;
     }
+    
+    /*
+     * Parses a JSP document by responding to SAX events.
+     *
+     * @throws JasperException
+     */
+    public static Node.Nodes parse(
+        ParserController pc,
+        String path,
+        File baseDir,
+        Node parent,
+        boolean isTagFile,
+        boolean directivesOnly,
+        String pageEnc,
+        String jspConfigPageEnc,
+        boolean isEncodingSpecifiedInProlog,
+        boolean isBomPresent)
+        throws JasperException {
+
+        JspDocumentParser jspDocParser =
+            new JspDocumentParser(pc, path, isTagFile, directivesOnly);
+        Node.Nodes pageNodes = null;
+
+        try {
+
+            // Create dummy root and initialize it with given page encodings
+            Node.Root dummyRoot = new Node.Root(null, parent, true);
+            dummyRoot.setPageEncoding(pageEnc);
+            dummyRoot.setJspConfigPageEncoding(jspConfigPageEnc);
+            dummyRoot.setIsEncodingSpecifiedInProlog(
+                isEncodingSpecifiedInProlog);
+            dummyRoot.setIsBomPresent(isBomPresent);
+            jspDocParser.current = dummyRoot;
+            if (parent == null) {
+                jspDocParser.addInclude(
+                    dummyRoot,
+                    jspDocParser.pageInfo.getIncludePrelude());
+            } else {
+                jspDocParser.isTop = false;
+            }
+
+            // Parse the input
+            SAXParser saxParser = getSAXParser(false, jspDocParser);
+            InputStream inStream = null;
+            try {
+                inStream = JspUtil.getInputStream(path, baseDir,
+                                                  jspDocParser.ctxt,
+                                                  jspDocParser.err);
+                saxParser.parse(new InputSource(inStream), jspDocParser);
+            } catch (EnableDTDValidationException e) {
+                saxParser = getSAXParser(true, jspDocParser);
+                jspDocParser.isValidating = true;
+                if (inStream != null) {
+                    try {
+                        inStream.close();
+                    } catch (Exception any) {
+                    }
+                }
+                inStream = JspUtil.getInputStream(path, baseDir,
+                                                  jspDocParser.ctxt,
+                                                  jspDocParser.err);
+                saxParser.parse(new InputSource(inStream), jspDocParser);
+            } finally {
+                if (inStream != null) {
+                    try {
+                        inStream.close();
+                    } catch (Exception any) {
+                    }
+                }
+            }
+
+            if (parent == null) {
+                jspDocParser.addInclude(
+                    dummyRoot,
+                    jspDocParser.pageInfo.getIncludeCoda());
+            }
+
+            // Create Node.Nodes from dummy root
+            pageNodes = new Node.Nodes(dummyRoot);
+
+        } catch (IOException ioe) {
+            jspDocParser.err.jspError(ioe, "jsp.error.data.file.read", path);
+        } catch (SAXParseException e) {
+            jspDocParser.err.jspError
+                (new Mark(jspDocParser.ctxt, path, e.getLineNumber(),
+                          e.getColumnNumber()),
+                e, e.getMessage());
+        } catch (Exception e) {
+            jspDocParser.err.jspError(e, "jsp.error.data.file.processing", path);
+        }
+
+        return pageNodes;
+    }    
 
     /*
      * Processes the given list of included files.

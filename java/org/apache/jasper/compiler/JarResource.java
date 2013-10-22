@@ -22,6 +22,9 @@ import java.net.URL;
 import java.util.jar.JarFile;
 
 public interface JarResource {
+	
+
+	TldResourceType getType();
        
     /**     
      * @return The JarFile for this resource. A new instance of JarFile

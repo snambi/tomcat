@@ -18,6 +18,7 @@ package org.apache.jasper.compiler;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.JarURLConnection;
@@ -378,7 +379,16 @@ public class TldLocationsCache {
         }
     }
 
-    /*
+    /**
+     * tldScanDir has two usecases,
+     * <ol>
+     *  <li>scan directories that do not contain META-INF at the root for TLDs</li>
+     *  <li>scan directories that contain META-INF/*\*\/*.tld. 
+     *  	if it contains META-INF folder at the first level, it should be treated a exploded jar file that contains TLD files.
+     *      This is true, when using "virtual-webapp-classloader" , a tag-lib jar will be available as a filesystem resource. 
+     *  </li>
+     * </ol> 
+     *    
      * Scans the directory identified by startPath, along with its
      * sub-directories, for TLDs.
      *
@@ -386,18 +396,29 @@ public class TldLocationsCache {
      */
     private void tldScanDir(File start) throws IOException {
 
-        File[] fileList = start.listFiles();
-        if (fileList != null) {
-            for (int i = 0; i < fileList.length; i++) {
-                // Scan recursively
-                if (fileList[i].isDirectory()) {
-                    tldScanDir(fileList[i]);
-                } else if (fileList[i].getAbsolutePath().endsWith(TLD_EXT)) {
-                    InputStream stream = null;
+    	if( start != null && start.isDirectory() ){
+    		
+    		// scan like a jar resource if the directory is "META-INF"
+    		// in this case, this will be treated as an exploded jar file that contains TLD file
+    		// this is possible during development using an IDE which uses "virtual-webapp-classloader".
+    		String resourcePath = start.getParentFile().getAbsolutePath();
+    		
+    		File[] filelist = start.listFiles();
+    		
+    		for(int i=0; i<filelist.length ; i++ ){
+    			if( filelist[i].isDirectory() ){
+    				tldScanDir(resourcePath, filelist[i]);
+    			}else if( filelist[i].getAbsolutePath().endsWith(TLD_EXT) ){
+                    
+    				InputStream stream = null;
                     try {
-                        stream = new FileInputStream(fileList[i]);
-                        tldScanStream(
-                                fileList[i].toURI().toString(), null, stream);
+                    	
+                    	// calculate the entryname
+    					String entryName = filelist[i].getAbsolutePath().toString().substring(resourcePath.length());
+    					
+                        stream = new FileInputStream(filelist[i]);
+                        tldScanStream( resourcePath, entryName, stream);
+                        
                     } finally {
                         if (stream != null) {
                             try {
@@ -407,9 +428,45 @@ public class TldLocationsCache {
                             }
                         }
                     }
-                }
-            }
-        }
+                    
+    			}
+    		}
+    		
+    	}
+    }
+    
+    private void tldScanDir(String resourcePath , File start) throws IOException {
+    	
+    	File[] filelist = start.listFiles();
+    	
+    	if( filelist != null ){
+    		
+    		for( int i=0; i < filelist.length ; i++ ){
+    			
+    			if( filelist[i].isDirectory() ){
+    				tldScanDir(resourcePath, filelist[i]);
+    			}else if( filelist[i].getAbsolutePath().endsWith(TLD_EXT) ){
+    				
+    				InputStream stream = null;
+    				
+    				try{
+    					// calculate the entryname
+    					String entryName = filelist[i].getAbsolutePath().toString().substring(resourcePath.length());
+    					stream = new FileInputStream(filelist[i]);
+    					tldScanStream(resourcePath, entryName, stream);
+    					
+    				}finally{
+    					if( stream != null ){
+    						try{
+    							stream.close();
+    						}catch( Throwable t){
+    							ExceptionUtils.handleThrowable(t);
+    						}
+    					}
+    				}
+    			}
+    		}
+    	}
     }
 
     /*

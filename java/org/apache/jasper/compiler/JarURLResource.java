@@ -17,6 +17,7 @@
 
 package org.apache.jasper.compiler;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.JarURLConnection;
 import java.net.MalformedURLException;
@@ -26,6 +27,7 @@ import java.util.jar.JarFile;
 public class JarURLResource implements JarResource {
     
     private String jarUrl;
+    private TldResourceType resourceType;
     
     public JarURLResource(URL jarURL) {
         this(jarURL.toExternalForm());
@@ -33,6 +35,16 @@ public class JarURLResource implements JarResource {
     
     public JarURLResource(String jarUrl) {
         this.jarUrl = jarUrl;
+        
+        // detect the type, whether the resource is a jarfile or directory
+        File file = new File(jarUrl);
+        if( file != null ){
+        	if( file.isDirectory() ){
+        		resourceType = TldResourceType.DIRECTORY;
+        	}else{
+        		resourceType = TldResourceType.JAR_FILE;
+        	}
+        }
     }
     
     @Override
@@ -51,10 +63,24 @@ public class JarURLResource implements JarResource {
     
     @Override
     public URL getEntry(String name) {
+    	URL result=null;
         try {
-            return new URL("jar:" + jarUrl + "!/" + name);
+        	if( resourceType == TldResourceType.JAR_FILE){
+                result= new URL("jar:" + jarUrl + "!/" + name);
+        	}else if( resourceType == TldResourceType.DIRECTORY ){
+        		File entry = new File(jarUrl, name);
+        		result = entry.toURL();
+        	}
+
         } catch (MalformedURLException e) {
             throw new RuntimeException("", e);
         }
+        
+        return result;
     }
+
+	@Override
+	public TldResourceType getType() {
+		return resourceType;
+	}
 }

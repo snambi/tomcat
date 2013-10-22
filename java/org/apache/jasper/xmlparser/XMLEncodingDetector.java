@@ -26,6 +26,7 @@
 package org.apache.jasper.xmlparser;
 
 import java.io.EOFException;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -114,6 +115,19 @@ public class XMLEncodingDetector {
 
         return ret;
     }
+    
+    public static Object[] getEncoding(String fname, File baseDir,
+						            JspCompilationContext ctxt,
+						            ErrorDispatcher err)
+						            			throws IOException, JasperException
+	{
+		InputStream inStream = JspUtil.getInputStream(fname, baseDir, ctxt,err);
+		XMLEncodingDetector detector = new XMLEncodingDetector();
+		Object[] ret = detector.getEncoding(inStream, err);
+		inStream.close();
+		
+		return ret;
+	}
 
     private Object[] getEncoding(InputStream in, ErrorDispatcher err)
         throws IOException, JasperException
